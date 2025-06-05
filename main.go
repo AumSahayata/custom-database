@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/jcelliott/lumber"
@@ -15,12 +14,12 @@ const Version = "1.0.1"
 
 type (
 	Logger interface {
-		Fatal (string, ...interface{})
-		Error (string, ...interface{})
-		Warn (string, ...interface{})
-		Info (string, ...interface{})
-		Debug (string, ...interface{})
-		Trace (string, ...interface{})
+		Fatal (string, ...any)
+		Error (string, ...any)
+		Warn (string, ...any)
+		Info (string, ...any)
+		Debug (string, ...any)
+		Trace (string, ...any)
 	}
 
 	Driver struct {
@@ -35,7 +34,7 @@ type Options struct {
 	Logger
 }
 
-func New(dir string, options Options) (*Driver, error) {
+func New(dir string, options *Options) (*Driver, error) {
 	dir = filepath.Clean(dir)
 
 	opts := Options{}
@@ -65,11 +64,11 @@ func New(dir string, options Options) (*Driver, error) {
 
 func (d *Driver) Write(collection, resource string, v interface{}) error {
 	if collection == "" {
-		return fmt.Errorf("Missing collection - no place to save record!")
+		return fmt.Errorf("missing collection - no place to save record")
 	}
 
 	if resource == "" {
-		return fmt.Errorf("Missing resource - unable to save record (no name)!")
+		return fmt.Errorf("missing resource - unable to save record (no name)")
 	}
 
 	mutex := d.getOrCreateMutex(collection)
@@ -100,14 +99,14 @@ func (d *Driver) Write(collection, resource string, v interface{}) error {
 
 func (d *Driver) Read(collection, resource string, v interface{}) error {
 	if collection == "" {
-		return fmt.Errorf("Missing collection - unable to read")
+		return fmt.Errorf("missing collection - unable to read")
 	}
 
 	if resource == "" {
-		return fmt.Errorf("Missing resource - unable to read record (no name)!")
+		return fmt.Errorf("missing resource - unable to read record (no name)")
 	}
 
-	record := filepath(d.dir, collection, resource)
+	record := filepath.Join(d.dir, collection, resource)
 
 	if _, err := stat(record); err != nil {
 		return err
@@ -123,7 +122,7 @@ func (d *Driver) Read(collection, resource string, v interface{}) error {
 
 func (d *Driver) ReadAll(collection string) ([]string, error) {
 	if collection == "" {
-		return nil, fmt.Errorf("Missing collection - unable to read")
+		return nil, fmt.Errorf("missing collection - unable to read")
 	}
 
 	dir := filepath.Join(d.dir, collection)
@@ -137,7 +136,7 @@ func (d *Driver) ReadAll(collection string) ([]string, error) {
 		return nil, err
 	}
 
-	records := []string
+	records := []string{}
 
 	for _, file := range files {
 		b, err := os.ReadFile(filepath.Join(dir, file.Name()))
@@ -145,14 +144,31 @@ func (d *Driver) ReadAll(collection string) ([]string, error) {
 			return nil, err
 		}
 
-		records = append(records, string[b])
+		records = append(records, string(b))
 	}
 
 	return records, nil
 }
 
-func (d *Driver) Delete() error {
+func (d *Driver) Delete(collection, resource string) error {
+	path := filepath.Join(collection, resource)
+	mutex := d.getOrCreateMutex(collection)
 
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	dir := filepath.Join(d.dir, path)
+	
+	switch fi, err := stat(dir);{
+	case fi == nil, err != nil:
+		return fmt.Errorf("unable to find file or directory named %v", path)
+	case fi.Mode().IsDir():
+		return os.RemoveAll(dir)
+	case fi.Mode().IsRegular():
+		return os. RemoveAll(dir + ".json")
+	}
+
+	return nil
 }
 
 func (d *Driver) getOrCreateMutex(collection string) *sync.Mutex {
@@ -225,9 +241,9 @@ func main() {
 	}
 	fmt.Println(records)
 
-	allusers := []User
+	allusers := []User{}
 
-	for _, f := records {
+	for _, f := range records {
 		emloyeeFound := User{}
 		if err := json.Unmarshal([]byte(f), &emloyeeFound); err != nil {
 			fmt.Println("Error:", err)
@@ -236,13 +252,13 @@ func main() {
 	}
 	fmt.Println(allusers)
 
-	// if err := db.Delete("user", "john"); err != nil {
+	// if err := db.Delete("users", "John"); err != nil {
 	// 	fmt.Println("Error:", err)
 	// }
 
-	// if err := db.Delete("user", ""); err != nil {
-	// 	fmt.Println("Error:", err)
-	// }
+	if err := db.Delete("users", ""); err != nil {
+		fmt.Println("Error:", err)
+	}
 
 
 }
